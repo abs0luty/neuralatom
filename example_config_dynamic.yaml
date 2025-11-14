@@ -1,0 +1,165 @@
+# Example Configuration for Dynamic Clustering
+#
+# This shows how to enable and configure dynamic neural atom clustering
+# in your experiments.
+
+# ==============================================================================
+# Basic Configuration (Compatible with existing configs)
+# ==============================================================================
+
+# Dataset configuration (use your existing settings)
+dataset:
+  format: PyG
+  name: peptides-func  # or your dataset
+  task: graph
+  task_type: classification_multilabel
+  transductive: False
+  split_mode: standard
+  node_encoder: True
+  node_encoder_name: Atom
+  node_encoder_bn: False
+  edge_encoder: True
+  edge_encoder_name: Bond
+  edge_encoder_bn: False
+
+# Model configuration
+gt:
+  layer_type: GINE+Transformer  # or your preferred layer type
+  layers: 10
+  dim_hidden: 64
+  n_heads: 4
+  dropout: 0.0
+  attn_dropout: 0.0
+  layer_norm: False
+  batch_norm: True
+
+# GNN configuration
+gnn:
+  layers_pre_mp: 0
+  layers_mp: 2
+  dim_inner: 64
+  layer_type: gatedgcnconv
+  stage_type: stack
+  batchnorm: True
+  act: relu
+  dropout: 0.0
+  agg: mean
+  normalize_adj: False
+  head: default
+
+# ==============================================================================
+# Dynamic Clustering Configuration (NEW!)
+# ==============================================================================
+
+gvm:
+  # Static clustering settings (used when use_dynamic_clustering=False)
+  avg_nodes: 50
+  pool_ratio: 0.25
+  n_pool_heads: 2
+
+  # Dynamic clustering settings (NEW)
+  use_dynamic_clustering: True  # ← Set to True to enable!
+
+  # Cluster count range - adjust based on your dataset
+  # Rule of thumb:
+  #   - min_clusters: ~5-10% of average graph size
+  #   - max_clusters: ~50% of average graph size
+  min_clusters: 5    # Minimum neural atoms per graph
+  max_clusters: 25   # Maximum neural atoms per graph
+
+  # Optional: Advanced tuning (usually not needed)
+  # predictor_hidden_dim: 64  # MLP capacity (default: 64)
+  # min_ratio: 0.1            # Minimum pooling ratio (default: 0.1)
+  # max_ratio: 0.5            # Maximum pooling ratio (default: 0.5)
+
+# ==============================================================================
+# Training Configuration
+# ==============================================================================
+
+train:
+  mode: custom
+  batch_size: 32
+  eval_period: 1
+  ckpt_period: 100
+
+optim:
+  optimizer: adamW
+  weight_decay: 0.0
+  base_lr: 0.001
+  max_epoch: 300
+  scheduler: cosine_with_warmup
+  num_warmup_epochs: 50
+
+# ==============================================================================
+# Example Configurations for Different Datasets
+# ==============================================================================
+
+# For small molecules (avg 20-30 nodes):
+# gvm:
+#   use_dynamic_clustering: True
+#   min_clusters: 3
+#   max_clusters: 15
+
+# For medium molecules (avg 50-100 nodes):
+# gvm:
+#   use_dynamic_clustering: True
+#   min_clusters: 5
+#   max_clusters: 30
+
+# For large molecules (avg 100+ nodes):
+# gvm:
+#   use_dynamic_clustering: True
+#   min_clusters: 10
+#   max_clusters: 50
+
+# For protein graphs (avg 500+ nodes):
+# gvm:
+#   use_dynamic_clustering: True
+#   min_clusters: 20
+#   max_clusters: 100
+
+# ==============================================================================
+# Monitoring During Training
+# ==============================================================================
+
+# The dynamic clustering will log:
+# - batch.num_predicted_clusters: Number of clusters used
+# - batch.predicted_cluster_ratio: Predicted pooling ratio
+#
+# You can access these in your training loop:
+#
+# for batch in train_loader:
+#     output = model(batch)
+#     if hasattr(batch, 'num_predicted_clusters'):
+#         logger.info(f"Used {batch.num_predicted_clusters} clusters")
+#
+# Consider logging these values to WandB/TensorBoard for analysis
+
+# ==============================================================================
+# Comparison with Static Clustering
+# ==============================================================================
+
+# To compare performance:
+# 1. Train with use_dynamic_clustering=True (this config)
+# 2. Train with use_dynamic_clustering=False (baseline)
+# 3. Compare:
+#    - Validation accuracy/MAE
+#    - Training time
+#    - Model parameters
+#    - Cluster count distribution (dynamic only)
+
+# ==============================================================================
+# Troubleshooting
+# ==============================================================================
+
+# Issue: Cluster counts not changing
+# Solution: Ensure use_dynamic_clustering=True and check predictor is training
+
+# Issue: Poor performance
+# Solution: Try adjusting min/max_clusters range based on your dataset
+
+# Issue: Out of memory
+# Solution: Reduce max_clusters to use less memory for seed embeddings
+
+# Issue: Training unstable
+# Solution: May need warmup period for predictor to learn good values

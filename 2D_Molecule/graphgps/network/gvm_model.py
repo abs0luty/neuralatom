@@ -96,6 +96,9 @@ class GVMModel(torch.nn.Module):
                     attn_dropout=cfg.gt.attn_dropout,
                     layer_norm=cfg.gt.layer_norm,
                     batch_norm=cfg.gt.batch_norm,
+                    use_dynamic_clustering=cfg.gvm.use_dynamic_clustering,
+                    max_clusters=cfg.gvm.max_clusters,
+                    min_clusters=cfg.gvm.min_clusters,
                 )
             )
 

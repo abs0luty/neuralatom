@@ -14,5 +14,10 @@ def custom_gnn_cfg(cfg):
     cfg.gvm.n_pool_heads = 2
     cfg.gvm.na_order = "desc" # fixed, incre
 
+    # Dynamic clustering parameters
+    cfg.gvm.use_dynamic_clustering = False  # Set to True to enable learnable cluster count
+    cfg.gvm.max_clusters = 50  # Maximum number of clusters for dynamic mode
+    cfg.gvm.min_clusters = 3   # Minimum number of clusters for dynamic mode
+
 
 register_config("custom_gnn", custom_gnn_cfg)

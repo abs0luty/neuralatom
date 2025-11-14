@@ -4,7 +4,7 @@ from ocpmodels.models.gemnet.layers.base_layers import Dense, ResidualLayer
 from ocpmodels.modules.scaling.scale_factor import ScaleFactor
 from torch_geometric.utils import to_dense_batch
 
-from .na_pooling import Exchanging, Porjecting
+from .na_pooling import Exchanging, Porjecting, DynamicPorjecting
 
 
 class NeuralAtom(torch.nn.Module):
@@ -46,6 +46,9 @@ class NeuralAtom(torch.nn.Module):
         num_hidden: int,
         activation=None,
         name=None,  # identifier in case a ScalingFactor is applied to Ewald output
+        use_dynamic_clustering=False,  # New parameter
+        max_clusters=50,  # Maximum clusters for dynamic mode
+        min_clusters=3,  # Minimum clusters for dynamic mode
     ):
         super().__init__()
 
@@ -62,16 +65,29 @@ class NeuralAtom(torch.nn.Module):
             self.ewald_scale_sum = ScaleFactor(name + "_sum")
         else:
             self.ewald_scale_sum = None
-        number_atoms = 100
-        ratio = 0.1
 
-        self.proj_layer = Porjecting(
-            emb_size_atom,
-            num_heads=1,
-            num_seeds=int(number_atoms * ratio),
-            Conv=None,
-            layer_norm=True,
-        )
+        self.use_dynamic_clustering = use_dynamic_clustering
+
+        if use_dynamic_clustering:
+            self.proj_layer = DynamicPorjecting(
+                channels=emb_size_atom,
+                num_heads=1,
+                max_seeds=max_clusters,
+                min_seeds=min_clusters,
+                Conv=None,
+                layer_norm=True,
+            )
+        else:
+            number_atoms = 100
+            ratio = 0.1
+            self.proj_layer = Porjecting(
+                emb_size_atom,
+                num_heads=1,
+                num_seeds=int(number_atoms * ratio),
+                Conv=None,
+                layer_norm=True,
+            )
+
         self.interaction_layer = Exchanging(
             emb_size_atom,
             emb_size_atom,
@@ -118,7 +134,14 @@ class NeuralAtom(torch.nn.Module):
         batch_x, ori_mask = to_dense_batch(x, batch)
         mask = (~ori_mask).unsqueeze(1).to(dtype=x.dtype) * -1e9
         # * S for node cluster allocation matrix
-        NAs_emb, S = self.proj_layer(batch_x, None, mask)
+        if self.use_dynamic_clustering:
+            NAs_emb, S, num_clusters, ratio = self.proj_layer(batch_x, None, mask)
+            # Store for potential logging/analysis
+            self.last_num_clusters = num_clusters
+            self.last_cluster_ratio = ratio
+        else:
+            NAs_emb, S = self.proj_layer(batch_x, None, mask)
+
         NAs_emb = self.interaction_layer(NAs_emb, None, None)[0]
         h = reduce(
             einsum(

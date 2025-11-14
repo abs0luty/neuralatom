@@ -10,7 +10,7 @@ from graphgps.layer.bigbird_layer import SingleBigBirdLayer
 from graphgps.layer.gatedgcn_layer import GatedGCNLayer
 from graphgps.layer.gine_conv_layer import GINEConvESLapPE
 from graphgps.layer.mlp_mixer_block import MLPMixer
-from graphgps.layer.neural_atom import Exchanging, Porjecting
+from graphgps.layer.neural_atom import Exchanging, Porjecting, DynamicPMA, PMA
 from performer_pytorch import SelfAttention
 from torch import nn
 from torch_geometric.data import Batch
@@ -38,11 +38,15 @@ class GVMLayer(nn.Module):
         layer_norm=False,
         batch_norm=True,
         bigbird_cfg=None,
+        use_dynamic_clustering=False,  # New parameter
+        max_clusters=50,  # Maximum clusters for dynamic mode
+        min_clusters=3,  # Minimum clusters for dynamic mode
     ):
         super().__init__()
 
         self.num_out_nodes = num_out_nodes
         self.pool_num_heads = pool_num_heads
+        self.use_dynamic_clustering = use_dynamic_clustering
 
         # self.mixer_dim = mixer_dim
         # self.mixer_depth = mixer_depth
@@ -188,9 +192,19 @@ class GVMLayer(nn.Module):
 
         # * Graph Virtual Nodes Pooling (adopt from GMT)
         # * ========================================
-        self.vn_pool_pma = PMA(
-            dim_h, self.pool_num_heads, self.num_out_nodes, Conv=None, layer_norm=True
-        )
+        if self.use_dynamic_clustering:
+            self.vn_pool_pma = DynamicPMA(
+                channels=dim_h,
+                num_heads=self.pool_num_heads,
+                max_seeds=max_clusters,
+                min_seeds=min_clusters,
+                Conv=None,
+                layer_norm=True,
+            )
+        else:
+            self.vn_pool_pma = PMA(
+                dim_h, self.pool_num_heads, self.num_out_nodes, Conv=None, layer_norm=True
+            )
 
         # self.vn_pool_sab = SAB(
         #     dim_h, dim_h, self.pool_num_heads, Conv=None, layer_norm=True
@@ -308,7 +322,13 @@ class GVMLayer(nn.Module):
         batch_x, ori_mask = to_dense_batch(h_local, batch.batch)
         mask = (~ori_mask).unsqueeze(1).to(dtype=batch.x.dtype) * -1e9
         # * S for node cluster allocation matrix
-        vns_emb, S = self.vn_pool_pma(batch_x, None, mask)
+        if self.use_dynamic_clustering:
+            vns_emb, S, num_clusters, ratio = self.vn_pool_pma(batch_x, None, mask)
+            # Store for potential logging/analysis
+            batch.num_predicted_clusters = num_clusters
+            batch.predicted_cluster_ratio = ratio
+        else:
+            vns_emb, S = self.vn_pool_pma(batch_x, None, mask)
         # vns_emb, _ = self.vn_pool_sab(vns_emb, None, None)
         # vns_emb = vns_emb.squeeze(1)  # * [B, k, D]
 

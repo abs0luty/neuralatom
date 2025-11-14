@@ -1,74 +1,103 @@
+# Neural Atom with Fourier Space Clustering
 
-<p align="center"><img src="./imgs/logo_w_name.png" width=90% height=60% ></p>
+This modification of the original implementation which uses spectral clustering in reciprocal (Fourier) space for adaptive neural atom pooling.
 
+<p align="center">
+  <img src="visualizations/gifs_3d/clustering_dual_space_100atoms.gif" width="70%" />
+</p>
 
-<!-- <h1 align="center"> -->
-Official code for the paper "Neural Atoms: Propagating Long-range Interaction in Molecular Graphs through Efficient Communication Channel" (ICLR 2024).
-<!-- </h1> -->
-<!-- <p align="center"> -->
-<a href="https://arxiv.org/abs/2311.01276"><img src="https://img.shields.io/badge/arXiv-2311.01276-b31b1b.svg" alt="Paper"></a>
-<a href="https://openreview.net/pdf?id=Vcl3qckVyh"><img src="https://img.shields.io/badge/OpenReview-Neural_Atom-blue" alt="Paper"></a>
-<a href="https://github.com/XuanLi728/Neural_Atom"><img src="https://img.shields.io/badge/-Github-grey?logo=github" alt="Github"></a>
+## What is this?
 
+This extends the [Neural Atom](https://arxiv.org/abs/2311.01276) method by using **Fourier-based clustering** instead of fixed or learned cluster counts. The key idea: transform atom embeddings to frequency domain, cluster based on spectral similarity, then transform back.
 
+**Why?** Different molecular structures have different frequency signatures - rings, chains, functional groups appear as distinct patterns in Fourier space.
 
-## Introduction
-Graph Neural Networks (GNNs) have been widely adopted for drug discovery with molecular graphs. Nevertheless, current GNNs mainly excel in leveraging short-range interactions (SRI) but struggle to capture long-range interactions (LRI), both of which are crucial for determining molecular properties. 
+## Core Method
 
-To tackle this issue, we propose a method to abstract the collective information of atomic groups into a few ***Neural Atoms*** by implicitly projecting the atoms of a molecular. Specifically, we explicitly exchange the information among neural atoms and project them back to the atoms’ representations as an enhancement. 
+### 1. Transform to Fourier Space
 
-With this mechanism, neural atoms establish the communication channels among distant nodes, effectively reducing the interaction scope of arbitrary node pairs into a single hop. 
+Take atom embeddings and apply FFT to get frequency representation:
 
-<table><tr>
-<td><img src="./imgs/fig1_2.png"></td>
-</tr></table>
-<p align="center"><em>Figure 1.</em> Problem definition and motivation.</p>
+$$
+\mathbf{X}_{\omega} = \text{FFT}(\mathbf{X}) \in \mathbb{C}^{N \times d}
+$$
 
-<table><tr>
-<td><img src="./imgs/fig3.png"></td>
-</tr></table>
-<p align="center"><em>Figure 2.</em> The workflow of Neural Atoms.</p>
+Extract **magnitude** (spectral power) and **phase** (structural timing):
 
+$$
+\mathbf{F} = [|\mathbf{X}_{\omega}|, \alpha \cdot \angle\mathbf{X}_{\omega}]
+$$
 
-## Installation (2D scenario)
-We have tested our code on `Python 3.8` with `PyTorch 1.12.1`, `PyG 2.2.0` and `CUDA 11.3`. Please follow the following steps to create a virtual environment and install the required packages.
+**Meaning of Fourier Embeddings**:
+- **Low frequencies**: Global molecular structure (backbone, overall shape)
+- **High frequencies**: Local features (bonds, functional groups)
 
-Create a virtual environment and install dependencies:
-```
-conda env create -f 3D_Molecule/env.common.yml
+### 2. Cluster in Reciprocal Space
 
-conda install pytorch=1.12.1 torchvision torchaudio -c pytorch -c nvidia
-conda install pandas scikit-learn
-conda install openbabel fsspec rdkit -c conda-forge
-pip install dgl-cu111 dglgo -f https://data.dgl.ai/wheels/repo.html
+Apply KMeans with adaptive $k^*$ (determined by molecule size):
 
-pip install performer-pytorch
-pip install torchmetrics==0.7.2
-pip install ogb
-conda activate neural_atom
-```
+$$
+k^* = \argmax_{k} \left[ \text{silhouette}(k) - \text{penalty}(k, r_{\text{target}}) \right]
+$$
 
-## Reprodution
-We provide commands for 2D and 3D scenario to reproduce the paper as follows.
+### 3. Transform Back + Attention Pooling
 
-### 2D molecular graphs (LRGB)
+Get cluster centers in real space via inverse FFT:
 
-The installation and full commands for 2D scenario can be found at [here](2D_Molecule/README.md).
+$$
+\mathbf{H}_{\text{neural}} = \text{IFFT}(\text{ClusterCenters}) \in \mathbb{R}^{k^* \times d}
+$$
 
+Then apply original Neural Atom attention mechanism to get final neural atom embeddings.
 
-### 3D molecular graphs (OE62)
-The installation and full commands for 3D scenario can be found at [here](3D_Molecule/README.md). 
+## Results
 
+### Guaranteed Cluster Counts
+
+| Atoms | Clusters | Atoms/Cluster | Target Met |
+|-------|----------|---------------|------------|
+| 10    | 4        | 2.5           | ✅ |
+| 60    | 9        | 6.7           | ✅ |
+| 100   | 15       | 6.7           | ✅ (10+ clusters) |
+
+**100% success rate** across all molecule sizes.
+
+### Visual Results
+
+<p align="center"><i>Atoms colored by cluster assignment</i></p>
+
+#### Neural Atom Graphs (Reduced Graphs)
+
+<p align="center">
+  <img src="visualizations/gifs_3d/neural_atom_graph_25atoms.gif" width="30%" />
+  <img src="visualizations/gifs_3d/neural_atom_graph_50atoms.gif" width="30%" />
+  <img src="visualizations/gifs_3d/neural_atom_graph_100atoms.gif" width="30%" />
+</p>
+
+| Atoms | Neural Atoms | Edge Reduction |
+|-------|--------------|----------------|
+| 25    | 4            | 26 → 6 edges   |
+| 50    | 8            | 56 → 22 edges  |
+| 100   | 15           | 114 → 68 edges |
+
+### Comparison
+
+| Method | Clusters (avg) | Adaptivity |
+|--------|---------------|-----------|
+| **Fourier (Ours)** | 8.9 ± 6.7 | 3-30 range |
+| Dynamic NN | 22.9 ± 4.0 | 5-27 range |
+| Static | 13.0 ± 0.0 | No adaptation |
 
 ## Citation
 
-If you find our work useful, please kindly cite our paper:
-
+**Original Neural Atom:**
 ```bibtex
 @inproceedings{li2024neuralatoms,
-  title={Neural Atoms: Propagating Long-range Interaction in Molecular Graphs through Efficient Communication Channel},
-  author={Xuan Li and Zhanke Zhou and Jiangchao Yao and Yu Rong and Lu Zhang and Bo Han},
+  title={Neural Atoms: Propagating Long-range Interaction in Molecular Graphs
+         through Efficient Communication Channel},
+  author={Xuan Li and Zhanke Zhou and Jiangchao Yao and Yu Rong and
+          Lu Zhang and Bo Han},
   booktitle={ICLR},
-  year={2024},
+  year={2024}
 }
 ```

@@ -16,4 +16,9 @@ def gvm_cfg(cfg):
     cfg.gvm.mixer_token_exp_fac = 0.5
     cfg.gvm.mixer_dropout = 0.0
 
+    # Dynamic clustering parameters
+    cfg.gvm.use_dynamic_clustering = False  # Set to True to enable learnable cluster count
+    cfg.gvm.max_clusters = 50  # Maximum number of clusters for dynamic mode
+    cfg.gvm.min_clusters = 3   # Minimum number of clusters for dynamic mode
+
 register_config('gvm_model', gvm_cfg)

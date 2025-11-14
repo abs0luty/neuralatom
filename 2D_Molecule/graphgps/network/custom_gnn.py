@@ -10,7 +10,7 @@ from graphgps.layer.gatedgcn_layer import GatedGCNLayer
 from graphgps.layer.gcnii_conv_layer import GCN2ConvLayer
 from graphgps.layer.gine_conv_layer import GINEConvLayer
 from graphgps.layer.mlp_layer import MLPLayer
-from graphgps.layer.neural_atom import Exchanging, Porjecting
+from graphgps.layer.neural_atom import Exchanging, Porjecting, DynamicPorjecting
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.models.gnn import FeatureEncoder, GNNPreMP
 from torch_geometric.graphgym.register import register_network
@@ -37,11 +37,12 @@ class CustomGNN(torch.nn.Module):
 
         conv_model = self.build_conv_model(cfg.gnn.layer_type)
         self.model_type = cfg.gnn.layer_type
+        self.use_dynamic_clustering = cfg.gvm.use_dynamic_clustering
 
         layers = []
         multi_NA = []
         NA_trans = []
-        
+
         num_out_nodes = cfg.gvm.avg_nodes
 
         num_NAs = [] # for incre number of NAs
@@ -66,15 +67,27 @@ class CustomGNN(torch.nn.Module):
                 )
             layers.append(layer)
 
-            multi_NA.append(
-                Porjecting(
-                    dim_in,
-                    num_heads=cfg.gvm.n_pool_heads,
-                    num_seeds=num_out_nodes,
-                    Conv=None,
-                    layer_norm=True,
+            if self.use_dynamic_clustering:
+                multi_NA.append(
+                    DynamicPorjecting(
+                        channels=dim_in,
+                        num_heads=cfg.gvm.n_pool_heads,
+                        max_seeds=cfg.gvm.max_clusters,
+                        min_seeds=cfg.gvm.min_clusters,
+                        Conv=None,
+                        layer_norm=True,
+                    )
                 )
-            )
+            else:
+                multi_NA.append(
+                    Porjecting(
+                        dim_in,
+                        num_heads=cfg.gvm.n_pool_heads,
+                        num_seeds=num_out_nodes,
+                        Conv=None,
+                        layer_norm=True,
+                    )
+                )
 
             NA_trans.append(
                 Exchanging(
@@ -142,7 +155,15 @@ class CustomGNN(torch.nn.Module):
         batch_x, ori_mask = to_dense_batch(batch.x, batch.batch)
         mask = (~ori_mask).unsqueeze(1).to(dtype=batch.x.dtype) * -1e9
         # * S for neural atom allocation matrix
-        vns_emb, S = self.multi_NA_layers[idx](batch_x, None, mask)
+        if self.use_dynamic_clustering:
+            vns_emb, S, num_clusters, ratio = self.multi_NA_layers[idx](batch_x, None, mask)
+            # Store for potential logging/analysis
+            if not hasattr(batch, 'num_predicted_clusters_per_layer'):
+                batch.num_predicted_clusters_per_layer = []
+            batch.num_predicted_clusters_per_layer.append(num_clusters)
+        else:
+            vns_emb, S = self.multi_NA_layers[idx](batch_x, None, mask)
+
         vns_emb = self.NA_trans_layers[idx](vns_emb, None, None)[0]
         h = reduce(
             einsum(
