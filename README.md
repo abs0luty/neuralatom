@@ -3,7 +3,7 @@
 This modification of the original implementation which uses spectral clustering in reciprocal (Fourier) space for adaptive neural atom pooling.
 
 <p align="center">
-  <img src="visualizations/gifs_3d/clustering_dual_space_100atoms.gif" width="70%" />
+  <img src="visualizations/gifs_3d/clustering_dual_space_100atoms.gif" />
 </p>
 
 ## What is this?
