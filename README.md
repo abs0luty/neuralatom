@@ -1,4 +1,4 @@
-# Neural Atom with Fourier Space Clustering
+# Neural Atom
 
 This modification of the original implementation which uses spectral clustering in reciprocal (Fourier) space for adaptive neural atom pooling.
 
