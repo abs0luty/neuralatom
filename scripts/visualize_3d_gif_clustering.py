@@ -14,8 +14,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib.animation import FuncAnimation, PillowWriter
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3d projection)
 import networkx as nx
+
+from molecule_viz_utils import (
+    prepare_atom_visuals,
+    nodes_by_cluster,
+    cluster_composition_label,
+    element_label_color,
+)
 
 
 # Load modules
@@ -95,6 +102,8 @@ def create_3d_rotating_gif_simple(
 
     # Create molecular graph
     G = create_molecular_graph(graph_size, seed=graph_size)
+    atom_labels, node_sizes = prepare_atom_visuals(G, seed=graph_size, size_scale=75.0)
+    node_sizes = np.array(node_sizes)
 
     # Create features with periodic patterns for better Fourier analysis
     base = torch.randn(1, 1, 64)
@@ -156,6 +165,9 @@ def create_3d_rotating_gif_simple(
 
     node_colors = colors[cluster_labels]
 
+    cluster_groups = nodes_by_cluster(cluster_labels, graph_size)
+    show_cluster_labels = method != 'fourier'
+
     # Create figure and axis
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
@@ -178,11 +190,42 @@ def create_3d_rotating_gif_simple(
             coords[:, 1],
             coords[:, 2],
             c=node_colors,
-            s=200,
+            s=node_sizes,
             edgecolors='black',
             linewidths=1.5,
             alpha=0.9
         )
+
+        for idx in range(graph_size):
+            elem = G.nodes[idx]['element']
+            ax.text(
+                coords[idx, 0],
+                coords[idx, 1],
+                coords[idx, 2],
+                atom_labels[idx],
+                fontsize=8,
+                color=element_label_color(elem),
+                ha='center',
+                va='center',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.75, edgecolor='none'),
+            )
+
+        if show_cluster_labels:
+            for cluster_id, members in cluster_groups.items():
+                member_coords = coords[members]
+                center = member_coords.mean(axis=0)
+                composition = cluster_composition_label(atom_labels, members, max_chars=30)
+                ax.text(
+                    center[0],
+                    center[1],
+                    center[2],
+                    composition,
+                    fontsize=8,
+                    ha='center',
+                    va='center',
+                    color='navy',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='wheat', alpha=0.65, edgecolor='navy', linewidth=0.8),
+                )
 
         # Title
         ax.set_title(
@@ -399,26 +442,6 @@ if __name__ == "__main__":
     test_sizes = [25, 50, 100]
 
     print("\n" + "=" * 80)
-    print("Creating Simple Rotating GIFs (Fourier Clustering)")
-    print("=" * 80)
-
-    for size in test_sizes:
-        output = os.path.join(base_dir, f"visualizations/gifs_3d/clustering_3d_fourier_{size}atoms.gif")
-        create_3d_rotating_gif_simple(
-            size, output, method='fourier', num_frames=36, duration=100
-        )
-
-    print("\n" + "=" * 80)
-    print("Creating Simple Rotating GIFs (Dynamic NN Clustering)")
-    print("=" * 80)
-
-    for size in test_sizes:
-        output = os.path.join(base_dir, f"visualizations/gifs_3d/clustering_3d_dynamic_{size}atoms.gif")
-        create_3d_rotating_gif_simple(
-            size, output, method='dynamic', num_frames=36, duration=100
-        )
-
-    print("\n" + "=" * 80)
     print("Creating Fourier/Real Space Dual GIFs")
     print("=" * 80)
 
@@ -433,6 +456,4 @@ if __name__ == "__main__":
     print("=" * 80)
     print("\nGenerated files:")
     for size in test_sizes:
-        print(f"  - clustering_3d_fourier_{size}atoms.gif")
-        print(f"  - clustering_3d_dynamic_{size}atoms.gif")
         print(f"  - clustering_dual_space_{size}atoms.gif")

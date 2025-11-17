@@ -12,6 +12,13 @@ import networkx as nx
 import importlib.util
 import os
 
+from molecule_viz_utils import (
+    prepare_atom_visuals,
+    nodes_by_cluster,
+    cluster_composition_label,
+    element_label_color,
+)
+
 # Load implementation
 def load_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -91,6 +98,8 @@ def visualize_molecule_clustering(graph_size, ax_dyn, ax_stat, title_prefix=""):
 
     # Create molecular graph
     G = create_molecular_graph(graph_size, seed=graph_size)
+    atom_labels, node_sizes = prepare_atom_visuals(G, seed=graph_size, size_scale=65.0)
+    node_sizes = np.array(node_sizes)
 
     # Create features
     features = torch.randn(1, graph_size, 64)
@@ -168,11 +177,47 @@ def visualize_molecule_clustering(graph_size, ax_dyn, ax_stat, title_prefix=""):
                     alpha=0.35,
                     linewidth=1.2)
 
+        strengths_clip = strengths[:graph_size] if strengths is not None else np.ones(graph_size)
+        if strengths_clip.max() - strengths_clip.min() < 1e-6:
+            size_scale = np.ones_like(strengths_clip)
+        else:
+            size_scale = (strengths_clip - strengths_clip.min()) / (
+                strengths_clip.max() - strengths_clip.min()
+            )
+            size_scale = 0.4 * size_scale + 0.8
+
+        scatter_sizes = node_sizes * size_scale
+
         ax.scatter(xs, ys, zs,
                    c=node_colors,
-                   s=150 + (strengths[:graph_size] * 120),
+                   s=scatter_sizes,
                    edgecolors='black',
-                   linewidths=0.8)
+                   linewidths=0.8,
+                   alpha=0.95)
+
+        for node in range(graph_size):
+            elem = G.nodes[node]['element']
+            ax.text(xs[node], ys[node], zs[node],
+                    atom_labels[node],
+                    fontsize=7,
+                    color=element_label_color(elem),
+                    ha='center',
+                    va='center',
+                    zorder=5,
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7, edgecolor='none'))
+
+        cluster_groups = nodes_by_cluster(node_to_cluster[:graph_size], graph_size)
+        for cluster_id, members in cluster_groups.items():
+            coords_cluster = coords[members]
+            center = coords_cluster.mean(axis=0)
+            composition = cluster_composition_label(atom_labels, members, max_chars=28)
+            ax.text(center[0], center[1], center[2],
+                    composition,
+                    fontsize=7,
+                    ha='center',
+                    va='center',
+                    color='navy',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='wheat', alpha=0.6, edgecolor='navy', linewidth=0.7))
 
         ax.set_title(title, fontsize=11, fontweight='bold')
         ax.set_xticks([])
