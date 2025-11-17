@@ -37,7 +37,7 @@ $$
 Apply KMeans with adaptive $k^*$ (determined by molecule size):
 
 $$
-k^* = \argmax_{k} \left[ \text{silhouette}(k) - \text{penalty}(k, r_{\text{target}}) \right]
+k^* = \text{argmax}_{k} \left[ \text{silhouette}(k) - \text{penalty}(k, r_{\text{target}}) \right]
 $$
 
 ### 3. Transform Back + Attention Pooling
@@ -69,9 +69,9 @@ Then apply original Neural Atom attention mechanism to get final neural atom emb
 #### Neural Atom Graphs (Reduced Graphs)
 
 <p align="center">
-  <img src="visualizations/gifs_3d/neural_atom_graph_25atoms.gif" width="30%" />
-  <img src="visualizations/gifs_3d/neural_atom_graph_50atoms.gif" width="30%" />
-  <img src="visualizations/gifs_3d/neural_atom_graph_100atoms.gif" width="30%" />
+  <img src="visualizations/gifs_3d/neural_atom_graph_25atoms.gif" width="90%" />
+  <img src="visualizations/gifs_3d/neural_atom_graph_50atoms.gif" width="90%" />
+  <img src="visualizations/gifs_3d/neural_atom_graph_100atoms.gif" width="90%" />
 </p>
 
 | Atoms | Neural Atoms | Edge Reduction |
