@@ -14,68 +14,55 @@ This extends the [Neural Atom](https://arxiv.org/abs/2311.01276) method by using
 
 ## Method
 
-Below is a **paste‑ready, equations‑only** block for your README. It turns Neural Atoms into an **adaptive** module where the *effective* number of neural atoms is **learned** (via simple sigmoid gates + (L_1) sparsity). It’s a drop‑in replacement for the project→exchange→retrieve steps in the original NA paper.  
-
----
-
-### Adaptive Neural Atoms — minimal equations
-
 **Inputs & shapes.**
-(H\in\mathbb{R}^{N\times d}) (atom embeddings), (K_{\max}) (upper bound on neural atoms), (P\in\mathbb{R}^{K_{\max}\times p}) (prototypes), (W_{\text{out}}\in\mathbb{R}^{p\times d}).
-*(Optional reciprocal view; keep if you have 3D coords (,R\in\mathbb{R}^{N\times 3},))*
-Choose fixed low‑freq wavevectors (G\in\mathbb{R}^{M\times 3});
-(U=RG^\top\in\mathbb{R}^{N\times M},\quad \Phi=[\cos U;|;\sin U]\in\mathbb{R}^{N\times 2M}).
-Concatenate features: (X=[,H;|;\Phi,]\in\mathbb{R}^{N\times p}) (take (p=d+2M)).
-*(If no coords, just set (X=H).)*
+$H\in\mathbb{R}^{N\times d}$ (atom embeddings), $K_{\max}$ (upper bound on neural atoms), $P\in\mathbb{R}^{K_{\max}\times p}$ (prototypes), $W_{\text{out}}\in\mathbb{R}^{p\times d}$.
 
-**Project (atoms → neural atoms, soft grouping).**
-[
+Choose fixed low‑freq wavevectors $G\in\mathbb{R}^{M\times 3}$;
+
+$U=RG^\top\in\mathbb{R}^{N\times M},\quad \Phi=[\cos U;|;\sin U]\in\mathbb{R}^{N\times 2M}$.
+
+Concatenate features: $X=[,H;|;\Phi,]\in\mathbb{R}^{N\times p}$ (take ($p=d+2M$)).
+
+**Project (atoms into neural atoms with soft grouping).**
+
+$$
 S=\frac{X P^\top}{\sqrt{p}}\in\mathbb{R}^{N\times K_{\max}},\qquad
-A=\operatorname{softmax}*{\text{row}}(S)\in\mathbb{R}^{N\times K*{\max}}.
-]
+A=\text{softmax}*{\text{row}}(S)\in\mathbb{R}^{N\times K*{\max}}.
+$$
 
 **Learned gates (make the count adaptive).**
-[
+
+$$
 g=\sigma(\theta)\in(0,1)^{K_{\max}},\qquad
-\widetilde A = A,\operatorname{Diag}(g)\in\mathbb{R}^{N\times K_{\max}}.
-]
+\widetilde A = A,\text{Diag}(g)\in\mathbb{R}^{N\times K_{\max}}.
+$$
 
 **Exchange (neural‑atom self‑attention).**
-[
+
+$$
 Y=\widetilde A^\top X\in\mathbb{R}^{K_{\max}\times p},\qquad
-Y'=\operatorname{MHA}(Y)\in\mathbb{R}^{K_{\max}\times p}.
-]
+Y'=\text{MHA}(Y)\in\mathbb{R}^{K_{\max}\times p}.
+$$
 
 **Retrieve (neural atoms → atoms, residual update).**
-[
+
+$$
 \Delta H=\widetilde A,Y',W_{\text{out}}\in\mathbb{R}^{N\times d},\qquad
 H_{\text{out}}=H+\Delta H\in\mathbb{R}^{N\times d}.
-]
+$$
 
 **Training objective (learn the number).**
-[
+
+$$
 \mathcal{L}=\mathcal{L}*{\text{task}}+\lambda\sum*{k=1}^{K_{\max}} g_k
 \quad\text{(small }\lambda\text{; prune at inference if }g_k<\varepsilon\text{).}
-]
+$$
 
 **Effective count (for logging / pruning).**
-[
-K_{\text{eff}}=\left|\left{k:;g_k>\varepsilon\right}\right|.
-]
 
----
-
-**Notes.**
-
-* The **NA skeleton** (project→exchange→retrieve) is unchanged; only (K) becomes **data‑driven** via (g).  
-* The optional reciprocal features ([\cos(RG^\top),\sin(RG^\top)]) mirror the **Ewald** split (long‑range structure emerges in reciprocal space). ([ScienceDirect][1])
-* If you prefer **hard** on/off tokens, swap the (L_1) gate penalty for **(L_0) (hard‑concrete) gates** and keep the same wiring. ([arXiv][2])
-
-*References:* Neural Atoms (ICLR’24), Sec. 3, Eqs. (1)–(3).  
-
-[1]: https://www.sciencedirect.com/science/article/pii/0010465596000161?utm_source=chatgpt.com "Ewald summation techniques in perspective: a survey"
-[2]: https://arxiv.org/abs/1712.01312?utm_source=chatgpt.com "Learning Sparse Neural Networks through $L_0$ Regularization"
-
+$$
+K_{\text{eff}}=|{k:;g_k>\varepsilon}|.
+$$
 
 ## Results
 
