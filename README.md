@@ -12,43 +12,70 @@ This extends the [Neural Atom](https://arxiv.org/abs/2311.01276) method by using
 
 **Why?** Different molecular structures have different frequency signatures - rings, chains, functional groups appear as distinct patterns in Fourier space.
 
-## Core Method
+## Method
 
-### Transform to Fourier Space
+Below is a **paste‑ready, equations‑only** block for your README. It turns Neural Atoms into an **adaptive** module where the *effective* number of neural atoms is **learned** (via simple sigmoid gates + (L_1) sparsity). It’s a drop‑in replacement for the project→exchange→retrieve steps in the original NA paper.  
 
-Take atom embeddings and apply FFT to get frequency representation:
+---
 
-$$
-\mathbf{X}_{\omega} = \text{FFT}(\mathbf{X}) \in \mathbb{C}^{N \times d}
-$$
+### Adaptive Neural Atoms — minimal equations
 
-Extract **magnitude** (spectral power) and **phase** (structural timing):
+**Inputs & shapes.**
+(H\in\mathbb{R}^{N\times d}) (atom embeddings), (K_{\max}) (upper bound on neural atoms), (P\in\mathbb{R}^{K_{\max}\times p}) (prototypes), (W_{\text{out}}\in\mathbb{R}^{p\times d}).
+*(Optional reciprocal view; keep if you have 3D coords (,R\in\mathbb{R}^{N\times 3},))*
+Choose fixed low‑freq wavevectors (G\in\mathbb{R}^{M\times 3});
+(U=RG^\top\in\mathbb{R}^{N\times M},\quad \Phi=[\cos U;|;\sin U]\in\mathbb{R}^{N\times 2M}).
+Concatenate features: (X=[,H;|;\Phi,]\in\mathbb{R}^{N\times p}) (take (p=d+2M)).
+*(If no coords, just set (X=H).)*
 
-$$
-\mathbf{F} = [|\mathbf{X}_{\omega}|, \alpha \cdot \angle\mathbf{X}_{\omega}]
-$$
+**Project (atoms → neural atoms, soft grouping).**
+[
+S=\frac{X P^\top}{\sqrt{p}}\in\mathbb{R}^{N\times K_{\max}},\qquad
+A=\operatorname{softmax}*{\text{row}}(S)\in\mathbb{R}^{N\times K*{\max}}.
+]
 
-**Meaning of Fourier Embeddings**:
-- **Low frequencies**: Global molecular structure (backbone, overall shape)
-- **High frequencies**: Local features (bonds, functional groups)
+**Learned gates (make the count adaptive).**
+[
+g=\sigma(\theta)\in(0,1)^{K_{\max}},\qquad
+\widetilde A = A,\operatorname{Diag}(g)\in\mathbb{R}^{N\times K_{\max}}.
+]
 
-### Cluster in Reciprocal Space
+**Exchange (neural‑atom self‑attention).**
+[
+Y=\widetilde A^\top X\in\mathbb{R}^{K_{\max}\times p},\qquad
+Y'=\operatorname{MHA}(Y)\in\mathbb{R}^{K_{\max}\times p}.
+]
 
-Apply KMeans with adaptive $k^*$ (determined by molecule size):
+**Retrieve (neural atoms → atoms, residual update).**
+[
+\Delta H=\widetilde A,Y',W_{\text{out}}\in\mathbb{R}^{N\times d},\qquad
+H_{\text{out}}=H+\Delta H\in\mathbb{R}^{N\times d}.
+]
 
-$$
-k^* = \text{argmax}_{k} \left[ \text{silhouette}(k) - \text{penalty}(k, r_{\text{target}}) \right]
-$$
+**Training objective (learn the number).**
+[
+\mathcal{L}=\mathcal{L}*{\text{task}}+\lambda\sum*{k=1}^{K_{\max}} g_k
+\quad\text{(small }\lambda\text{; prune at inference if }g_k<\varepsilon\text{).}
+]
 
-### Transform Back 
+**Effective count (for logging / pruning).**
+[
+K_{\text{eff}}=\left|\left{k:;g_k>\varepsilon\right}\right|.
+]
 
-Get cluster centers in real space via inverse FFT:
+---
 
-$$
-\mathbf{H}_{\text{neural}} = \text{IFFT}(\text{ClusterCenters}) \in \mathbb{R}^{k^* \times d}
-$$
+**Notes.**
 
-Then apply original Neural Atom attention mechanism to get final neural atom embeddings.
+* The **NA skeleton** (project→exchange→retrieve) is unchanged; only (K) becomes **data‑driven** via (g).  
+* The optional reciprocal features ([\cos(RG^\top),\sin(RG^\top)]) mirror the **Ewald** split (long‑range structure emerges in reciprocal space). ([ScienceDirect][1])
+* If you prefer **hard** on/off tokens, swap the (L_1) gate penalty for **(L_0) (hard‑concrete) gates** and keep the same wiring. ([arXiv][2])
+
+*References:* Neural Atoms (ICLR’24), Sec. 3, Eqs. (1)–(3).  
+
+[1]: https://www.sciencedirect.com/science/article/pii/0010465596000161?utm_source=chatgpt.com "Ewald summation techniques in perspective: a survey"
+[2]: https://arxiv.org/abs/1712.01312?utm_source=chatgpt.com "Learning Sparse Neural Networks through $L_0$ Regularization"
+
 
 ## Results
 
